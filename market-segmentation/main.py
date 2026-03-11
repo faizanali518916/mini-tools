@@ -3,8 +3,9 @@
 Market Segmentation - Interactive CLI for fetching and analysing Amazon ASIN data.
 
 Usage:
-  1. Paste ASINs (one per line) into  input.txt
+  1. Add ASINs (one per line) to .txt files in the input/ directory
   2. Run:  py main.py
+  3. Select input file when prompted
 """
 
 import sys
@@ -15,10 +16,15 @@ import questionary
 from rich.panel import Panel
 from rich import box
 
-from src.config import OUTPUT_DETAIL_DIR, OUTPUT_VARIANT_DIR, OUTPUT_EXPORTS_DIR
+from src.config import (
+    OUTPUT_DETAIL_DIR,
+    OUTPUT_VARIANT_DIR,
+    OUTPUT_EXPORTS_DIR,
+    INPUT_DIR,
+)
 from src.styles import console, custom_style
 from src.ui import banner, show_asin_table
-from src.asin_reader import read_asins
+from src.asin_reader import read_asins, list_input_files
 from src.detail import is_detail_cached, fetch_detail
 from src.variants import is_variant_cached, fetch_variant
 from src.exporter import export_to_csv
@@ -224,6 +230,32 @@ def run_fetch_both(targets: list[str]):
     questionary.press_any_key_to_continue(style=custom_style).ask()
 
 
+def select_input_file():
+    """Let user choose an input file from the input directory."""
+    input_files = list_input_files()
+
+    if not input_files:
+        console.print(
+            "[yellow]  No input files found in the [bright_cyan]input/[/bright_cyan] directory.\n"
+            "  Please add .txt files with ASINs (one per line) and run again.[/yellow]\n"
+        )
+        questionary.press_any_key_to_continue(style=custom_style).ask()
+        return None
+
+    choices = [f.name for f in input_files]
+    selected = questionary.select(
+        "Select input file:",
+        choices=choices,
+        style=custom_style,
+        instruction="(up/down to move, Enter to select)",
+    ).ask()
+
+    if selected is None:
+        return None
+
+    return INPUT_DIR / selected
+
+
 def main():
     for d in (OUTPUT_DETAIL_DIR, OUTPUT_VARIANT_DIR, OUTPUT_EXPORTS_DIR):
         d.mkdir(parents=True, exist_ok=True)
@@ -232,11 +264,15 @@ def main():
         while True:
             banner()
 
-            asins = read_asins()
+            input_file = select_input_file()
+            if input_file is None:
+                continue
+
+            asins = read_asins(input_file)
 
             if not asins:
                 console.print(
-                    "[yellow]  No ASINs found in [bright_cyan]input.txt[/bright_cyan].\n"
+                    f"[yellow]  No ASINs found in [bright_cyan]{input_file.name}[/bright_cyan].\n"
                     "  Add one ASIN per line and run again.[/yellow]\n"
                 )
                 questionary.press_any_key_to_continue(style=custom_style).ask()
