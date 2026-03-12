@@ -1,4 +1,5 @@
 import csv
+import re
 from datetime import datetime
 
 from .config import OUTPUT_EXPORTS_DIR
@@ -9,8 +10,9 @@ from .clipboard import copy_csv_to_clipboard
 
 def export_to_csv(asins: list[str]) -> str | None:
     """
-    Build a combined CSV from all cached detail + variant data for the given ASINs.
-    Dynamically handles all detail and variant attributes.
+    Build a CSV from all cached detail + variant data for the given ASINs.
+    Each attribute gets three columns: attribute-base, attribute-variations, attribute-count.
+
     Returns the output file path, or None if there is nothing to export.
     """
     OUTPUT_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -39,7 +41,22 @@ def export_to_csv(asins: list[str]) -> str | None:
     base_fields = ["asin", "name", "price", "url", "category"]
     base_set = set(base_fields)
     dynamic_detail = sorted(k for k in all_detail_keys if k not in base_set)
-    variant_fields = sorted(k for k in all_variant_keys if k != "asin")
+
+    attribute_names: set[str] = set()
+    for key in all_variant_keys:
+        if key != "asin":
+            if key.endswith("_count"):
+                attribute_names.add(key[:-6])
+            else:
+                m = re.match(r"^(.+)_\d+$", key)
+                if m:
+                    attribute_names.add(m.group(1))
+
+    variant_fields = []
+    for attr in sorted(attribute_names):
+        variant_fields.append(f"{attr}-base")
+        variant_fields.append(f"{attr}-variations")
+        variant_fields.append(f"{attr}-count")
 
     fieldnames = base_fields + dynamic_detail + variant_fields
 
@@ -60,22 +77,48 @@ def export_to_csv(asins: list[str]) -> str | None:
                 row.update(detail_rows[asin])
             else:
                 row["asin"] = asin
+
             if asin in variant_rows:
-                row.update(variant_rows[asin])
-            # Attributes completely absent for this ASIN get count=1 + placeholder value
-            missing_attrs = {
-                f[:-6]
-                for f in variant_fields
-                if f.endswith("_count") and not row.get(f)
-            }
+                variant_row = variant_rows[asin]
+                attr_data: dict[str, dict] = {}
+                for key, value in variant_row.items():
+                    if key == "asin":
+                        continue
+                    if key.endswith("_count"):
+                        attr_name = key[:-6]
+                        if attr_name not in attr_data:
+                            attr_data[attr_name] = {}
+                        attr_data[attr_name]["count"] = value
+                    else:
+                        m = re.match(r"^(.+)_(\d+)$", key)
+                        if m:
+                            attr_name = m.group(1)
+                            index = int(m.group(2))
+                            if attr_name not in attr_data:
+                                attr_data[attr_name] = {}
+                            if "values" not in attr_data[attr_name]:
+                                attr_data[attr_name]["values"] = {}
+                            attr_data[attr_name]["values"][index] = value
+
+                for attr_name, data in attr_data.items():
+                    values = data.get("values", {})
+                    count = data.get("count", len(values))
+                    row[f"{attr_name}-base"] = values.get(1, "-")
+                    variation_values = [
+                        values[i] for i in sorted(values.keys()) if i > 1
+                    ]
+                    row[f"{attr_name}-variations"] = (
+                        ", ".join(variation_values) if variation_values else "-"
+                    )
+                    row[f"{attr_name}-count"] = count
+
             for field in variant_fields:
-                if not row.get(field):
-                    if field.endswith("_count"):
+                if field not in row:
+                    if field.endswith("-count"):
                         row[field] = 1
-                    elif field.endswith("_1") and field[:-2] in missing_attrs:
-                        row[field] = "Base Product (no variations found)"
                     else:
                         row[field] = "-"
+
             writer.writerow(row)
 
     copy_csv_to_clipboard(out_path)
