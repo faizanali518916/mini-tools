@@ -21,11 +21,11 @@ pip install -r requirements.txt
 
 ## Setup
 
-1. Create a `src/config.py` file with your API keys:
+1. Create a `.env` file in the project root with your API keys:
 
-   ```python
-   OUTSCRAPER_API_KEY = "your-key-here"
-   CANOPY_API_KEY = "your-key-here"
+   ```env
+   OUTSCRAPER_API_KEY=your-key-here
+   CANOPY_API_KEY=your-key-here
    ```
 
 2. Create `input.txt` with ASINs (one per line):
