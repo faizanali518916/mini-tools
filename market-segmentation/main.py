@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import questionary
 from rich.panel import Panel
+from rich.json import JSON
 from rich import box
 
 from src.config import (
@@ -288,6 +289,7 @@ def main():
                     "-> Fetch Both (Details + Variants)",
                     "-> Export Processed ASINs to CSV",
                     "-> Copy CSV to Clipboard",
+                    "-> Search ASIN & View JSON",
                     "-> Refresh Status",
                     "-> Exit",
                 ],
@@ -409,7 +411,48 @@ def main():
                     console.print()
                     questionary.press_any_key_to_continue(style=custom_style).ask()
 
-            # "Refresh" just falls through and re-runs the loop
+            # ── Search & View ASIN JSON ──────────────────────────────────
+            elif "Search" in action:
+                banner()
+
+                available_asins = [
+                    a for a in asins if is_detail_cached(a) or is_variant_cached(a)
+                ]
+
+                if not available_asins:
+                    console.print(
+                        "[yellow]  No JSON data available for the current ASINs.\n"
+                        "  Fetch details or variants first.[/yellow]\n"
+                    )
+                    questionary.press_any_key_to_continue(style=custom_style).ask()
+                    continue
+
+                chosen_asin = questionary.autocomplete(
+                    "Search ASIN:",
+                    choices=available_asins,
+                    style=custom_style,
+                    validate=lambda val: val in available_asins
+                    or "Select a valid ASIN",
+                ).ask()
+
+                if chosen_asin:
+                    d_path = OUTPUT_DETAIL_DIR / f"{chosen_asin}.json"
+                    v_path = OUTPUT_VARIANT_DIR / f"{chosen_asin}.json"
+
+                    if d_path.exists():
+                        console.print(
+                            f"\n[bold cyan]── Detail JSON ({chosen_asin}) ──[/bold cyan]"
+                        )
+                        console.print(JSON(d_path.read_text(encoding="utf-8")))
+
+                    if v_path.exists():
+                        console.print(
+                            f"\n[bold cyan]── Variant JSON ({chosen_asin}) ──[/bold cyan]"
+                        )
+                        console.print(JSON(v_path.read_text(encoding="utf-8")))
+
+                    console.print()
+                    questionary.press_any_key_to_continue(style=custom_style).ask()
 
     except KeyboardInterrupt:
         console.print("\n  [dim]Interrupted. Goodbye![/dim]\n")
