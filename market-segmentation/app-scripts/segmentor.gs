@@ -1,6 +1,6 @@
 function generateSegmentationReports() {
 	const ss = SpreadsheetApp.getActiveSpreadsheet();
-	const toolSheet = ss.getSheetByName('Tool');
+	const toolSheet = ss.getSheetByName('tool');
 	const logRange = toolSheet.getRange('G4:L7');
 	const dataSheet = ss.getSheetByName('product_report');
 
